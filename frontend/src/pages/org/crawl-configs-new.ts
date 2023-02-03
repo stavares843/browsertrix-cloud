@@ -64,7 +64,7 @@ export class CrawlTemplatesNew extends LiteElement {
 
     // Allow user to go back to choose crawl type if new (not duplicated) config
     if (this.jobType && !this.initialCrawlTemplate.jobType) {
-      href = `/orgs/${this.orgId}/crawl-configs/new`;
+      href = `/orgs/${this.orgId}/crawl-configs?new`;
       label = msg("Choose Crawl Type");
     }
     return html`
@@ -136,7 +136,7 @@ export class CrawlTemplatesNew extends LiteElement {
         <a
           role="button"
           class="jobTypeButton"
-          href=${`/orgs/${this.orgId}/crawl-configs/new?jobType=url-list`}
+          href=${`/orgs/${this.orgId}/crawl-configs?new&jobType=url-list`}
           @click=${(e: any) => {
             this.navLink(e);
             this.jobType = "url-list";
@@ -148,7 +148,7 @@ export class CrawlTemplatesNew extends LiteElement {
               <div class="text-lg font-medium my-3">${msg("URL List")}</div>
               <p class="text-sm text-neutral-500">
                 ${msg(
-                  "The crawler visits every URL you tell it to and optionally every URL linked on those pages."
+                  "The crawler visits every URL specified in a list, and optionally every URL linked on those pages."
                 )}
               </p>
             </figcaption>
@@ -157,7 +157,7 @@ export class CrawlTemplatesNew extends LiteElement {
         <a
           role="button"
           class="jobTypeButton"
-          href=${`/orgs/${this.orgId}/crawl-configs/new?jobType=seed-crawl`}
+          href=${`/orgs/${this.orgId}/crawl-configs?new&jobType=seed-crawl`}
           @click=${(e: any) => {
             this.navLink(e);
             this.jobType = "seed-crawl";
@@ -169,7 +169,7 @@ export class CrawlTemplatesNew extends LiteElement {
               <div class="text-lg font-medium my-3">${msg("Seeded Crawl")}</div>
               <p class="text-sm text-neutral-500">
                 ${msg(
-                  "The crawler automatically finds new pages and archives them."
+                  "The crawler automatically discovers and archives pages starting from a single seed URL."
                 )}
               </p>
             </figcaption>

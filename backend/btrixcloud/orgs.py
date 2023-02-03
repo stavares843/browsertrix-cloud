@@ -136,6 +136,7 @@ class Organization(BaseMongoModel):
                 result["users"][id_] = {
                     "role": role,
                     "name": org_user.get("name", ""),
+                    "email": org_user.get("email", ""),
                 }
 
         return result
@@ -278,7 +279,7 @@ class OrgOps:
         new_user_invite = await self.invites.get_valid_invite(invite_token, user.email)
         await self.add_user_by_invite(new_user_invite, user)
         await self.invites.remove_invite(invite_token)
-        return True
+        return new_user_invite
 
     async def add_user_by_invite(self, invite: InvitePending, user: User):
         """Add user to an org from an InvitePending, if any.
@@ -314,6 +315,7 @@ class OrgOps:
 
 
 # ============================================================================
+# pylint: disable=too-many-statements
 def init_orgs_api(app, mdb, user_manager, invites, user_dep: User):
     """Init organizations api router for /orgs"""
     # pylint: disable=too-many-locals
@@ -421,7 +423,6 @@ def init_orgs_api(app, mdb, user_manager, invites, user_dep: User):
         org: Organization = Depends(org_owner_dep),
         user: User = Depends(user_dep),
     ):
-
         other_user = await user_manager.user_db.get_by_email(update.email)
         if not other_user:
             raise HTTPException(
@@ -442,7 +443,6 @@ def init_orgs_api(app, mdb, user_manager, invites, user_dep: User):
         org: Organization = Depends(org_owner_dep),
         user: User = Depends(user_dep),
     ):
-
         if await invites.invite_user(
             invite,
             user,
@@ -462,6 +462,11 @@ def init_orgs_api(app, mdb, user_manager, invites, user_dep: User):
         await ops.add_user_by_invite(invite, user)
         await user_manager.user_db.update(user)
         return {"added": True}
+
+    @router.get("/invites", tags=["invites"])
+    async def get_pending_org_invites(org: Organization = Depends(org_owner_dep)):
+        pending_invites = await user_manager.invites.get_pending_invites(org)
+        return {"pending_invites": pending_invites}
 
     @router.post("/remove", tags=["invites"])
     async def remove_user_from_org(

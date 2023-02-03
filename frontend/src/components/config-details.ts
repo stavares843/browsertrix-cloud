@@ -6,7 +6,7 @@ import RegexColorize from "regex-colorize";
 import ISO6391 from "iso-639-1";
 
 import LiteElement, { html } from "../utils/LiteElement";
-import type { CrawlConfig } from "../pages/org/types";
+import type { CrawlConfig, Seed, SeedConfig } from "../pages/org/types";
 import { humanizeSchedule } from "../utils/cron";
 
 /**
@@ -24,6 +24,10 @@ export class ConfigDetails extends LiteElement {
 
   @property({ type: Boolean })
   anchorLinks = false;
+
+  // Hide tag field, e.g. if embedded in crawl detail view
+  @property({ type: Boolean })
+  hideTags = false;
 
   private readonly scopeTypeLabels: Record<
     CrawlConfig["config"]["scopeType"],
@@ -43,7 +47,7 @@ export class ConfigDetails extends LiteElement {
     const exclusions = crawlConfig?.config.exclude || [];
     return html`
       <section id="crawl-information" class="mb-8">
-        <btrix-section-heading>
+        <btrix-section-heading style="--margin: var(--sl-spacing-medium)">
           <h4>
             ${this.renderAnchorLink("crawl-information")}${msg(
               "Crawl Information"
@@ -52,18 +56,21 @@ export class ConfigDetails extends LiteElement {
         >
         <btrix-desc-list>
           ${this.renderSetting(msg("Name"), crawlConfig?.name)}
-          ${this.renderSetting(
-            msg("Tags"),
-            crawlConfig?.tags?.length
-              ? crawlConfig.tags.map(
-                  (tag) => html`<btrix-tag class="mt-1 mr-2">${tag}</btrix-tag>`
-                )
-              : undefined
-          )}
+          ${this.hideTags
+            ? ""
+            : this.renderSetting(
+                msg("Tags"),
+                crawlConfig?.tags?.length
+                  ? crawlConfig.tags.map(
+                      (tag) =>
+                        html`<btrix-tag class="mt-1 mr-2">${tag}</btrix-tag>`
+                    )
+                  : undefined
+              )}
         </btrix-desc-list>
       </section>
       <section id="crawler-settings" class="mb-8">
-        <btrix-section-heading
+        <btrix-section-heading style="--margin: var(--sl-spacing-medium)"
           ><h4>
             ${this.renderAnchorLink("crawler-settings")}
             ${msg("Crawler Settings")}
@@ -104,7 +111,7 @@ export class ConfigDetails extends LiteElement {
         </btrix-desc-list>
       </section>
       <section id="browser-settings" class="mb-8">
-        <btrix-section-heading
+        <btrix-section-heading style="--margin: var(--sl-spacing-medium)"
           ><h4>
             ${this.renderAnchorLink("browser-settings")}
             ${msg("Browser Settings")}
@@ -138,7 +145,7 @@ export class ConfigDetails extends LiteElement {
         </btrix-desc-list>
       </section>
       <section id="crawl-scheduling" class="mb-8">
-        <btrix-section-heading
+        <btrix-section-heading style="--margin: var(--sl-spacing-medium)"
           ><h4>
             ${this.renderAnchorLink("crawl-scheduling")}
             ${msg("Crawl Scheduling")}
@@ -178,7 +185,7 @@ export class ConfigDetails extends LiteElement {
         `
       )}
       ${this.renderSetting(
-        msg("Include Linked Pages"),
+        msg("Include Any Linked Page"),
         Boolean(crawlConfig?.config.extraHops)
       )}
     `;
@@ -186,21 +193,29 @@ export class ConfigDetails extends LiteElement {
 
   private renderConfirmSeededSettings = () => {
     const crawlConfig = this.crawlConfig!;
+    const seedsConfig = crawlConfig.config;
+    const additionalUrlList = seedsConfig.seeds.slice(1);
+    let primarySeedConfig: SeedConfig | Seed = seedsConfig;
+    let primarySeedUrl = seedsConfig.seeds[0];
+    if (typeof seedsConfig.seeds[0] !== "string") {
+      primarySeedConfig = seedsConfig.seeds[0];
+      primarySeedUrl = primarySeedConfig.url;
+    }
+    const includeUrlList = primarySeedConfig.include || seedsConfig.include;
     return html`
-      ${this.renderSetting(
-        msg("Primary Seed URL"),
-        crawlConfig?.config.seeds[0]
-      )}
+      ${this.renderSetting(msg("Primary Seed URL"), primarySeedUrl)}
       ${this.renderSetting(
         msg("Crawl Scope"),
-        this.scopeTypeLabels[crawlConfig?.config.scopeType]
+        this.scopeTypeLabels[
+          primarySeedConfig.scopeType || seedsConfig.scopeType
+        ]
       )}
       ${this.renderSetting(
         msg("Extra URLs in Scope"),
-        crawlConfig?.config.include?.length
+        includeUrlList?.length
           ? html`
               <ul>
-                ${crawlConfig?.config.include.map(
+                ${includeUrlList.map(
                   (url: string) =>
                     staticHtml`<li class="regex">${unsafeStatic(
                       new RegexColorize().colorizeText(url)
@@ -212,12 +227,22 @@ export class ConfigDetails extends LiteElement {
       )}
       ${this.renderSetting(
         msg("Include Any Linked Page (“one hop out”)"),
-        Boolean(crawlConfig?.config.extraHops)
+        Boolean(primarySeedConfig.extraHops ?? seedsConfig.extraHops)
+      )}
+      ${this.renderSetting(
+        msg("List of Additional URLs"),
+        additionalUrlList?.length
+          ? html`
+              <ul>
+                ${additionalUrlList.map((url) => html`<li>${url}</li>`)}
+              </ul>
+            `
+          : msg("None")
       )}
       ${this.renderSetting(
         msg("Max Pages"),
-        crawlConfig?.config.limit
-          ? msg(str`${crawlConfig?.config.limit} pages`)
+        seedsConfig.limit
+          ? msg(str`${primarySeedConfig.limit ?? seedsConfig.limit} pages`)
           : msg("Unlimited")
       )}
     `;

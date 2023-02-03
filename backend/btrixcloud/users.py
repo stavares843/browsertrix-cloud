@@ -25,7 +25,7 @@ from fastapi_users.authentication import (
 )
 from fastapi_users.db import MongoDBUserDatabase
 
-from .invites import InvitePending, InviteRequest
+from .invites import InvitePending, InviteRequest, UserRole
 
 
 # ============================================================================
@@ -151,7 +151,7 @@ class UserManager(BaseUserManager[UserCreate, UserDB]):
         """return list of user names for given ids"""
         user_ids = [UUID4(id_) for id_ in user_ids]
         cursor = self.user_db.collection.find(
-            {"id": {"$in": user_ids}}, projection=["id", "name"]
+            {"id": {"$in": user_ids}}, projection=["id", "name", "email"]
         )
         return await cursor.to_list(length=1000)
 
@@ -236,6 +236,7 @@ class UserManager(BaseUserManager[UserCreate, UserDB]):
         """custom post registration callback, also receive the UserCreate object"""
 
         print(f"User {user.id} has registered.")
+        add_to_default_org = False
 
         if user_create.newOrg is True:
             print(f"Creating new organization for {user.id}")
@@ -249,25 +250,34 @@ class UserManager(BaseUserManager[UserCreate, UserDB]):
                 storage_name="default",
                 user=user,
             )
-        else:
-            default_org = await self.org_ops.get_default_org()
-            if default_org:
-                await self.org_ops.add_user_to_org(default_org, user.id)
 
         is_verified = hasattr(user_create, "is_verified") and user_create.is_verified
 
         if user_create.inviteToken:
+            new_user_invite = None
             try:
-                await self.org_ops.handle_new_user_invite(user_create.inviteToken, user)
+                new_user_invite = await self.org_ops.handle_new_user_invite(
+                    user_create.inviteToken, user
+                )
             except HTTPException as exc:
                 print(exc)
+
+            if new_user_invite and not new_user_invite.oid:
+                add_to_default_org = True
 
             if not is_verified:
                 # if user has been invited, mark as verified immediately
                 await self._update(user, {"is_verified": True})
 
-        elif not is_verified:
-            asyncio.create_task(self.request_verify(user, request))
+        else:
+            add_to_default_org = True
+            if not is_verified:
+                asyncio.create_task(self.request_verify(user, request))
+
+        if add_to_default_org:
+            default_org = await self.org_ops.get_default_org()
+            if default_org:
+                await self.org_ops.add_user_to_org(default_org, user.id)
 
     async def on_after_forgot_password(
         self, user: UserDB, token: str, request: Optional[Request] = None
@@ -353,6 +363,7 @@ class BearerOrQueryTransport(BearerTransport):
 
 
 # ============================================================================
+# pylint: disable=too-many-locals
 def init_users_api(app, user_manager):
     """init fastapi_users"""
     bearer_transport = BearerOrQueryTransport(tokenUrl="auth/jwt/login")
@@ -422,7 +433,14 @@ def init_users_api(app, user_manager):
         user_orgs = await user_manager.org_ops.get_orgs_for_user(user)
         if user_orgs:
             user_info["orgs"] = [
-                {"id": org.id, "name": org.name, "default": org.default}
+                {
+                    "id": org.id,
+                    "name": org.name,
+                    "default": org.default,
+                    "role": UserRole.SUPERADMIN
+                    if user.is_superuser
+                    else org.users.get(str(user.id)),
+                }
                 for org in user_orgs
             ]
         print(f"user info with orgs: {user_info}", flush=True)
@@ -457,7 +475,6 @@ def init_users_api(app, user_manager):
     async def get_existing_user_invite_info(
         token: str, user: User = Depends(current_active_user)
     ):
-
         try:
             invite = user.invites[token]
         except:
@@ -470,6 +487,14 @@ def init_users_api(app, user_manager):
     async def delete_invite(token: str):
         await user_manager.invites.remove_invite(token)
         return {"removed": True}
+
+    @users_router.get("/invites", tags=["invites"])
+    async def get_pending_invites(user: User = Depends(current_active_user)):
+        if not user.is_superuser:
+            raise HTTPException(status_code=403, detail="Not Allowed")
+
+        pending_invites = await user_manager.invites.get_pending_invites()
+        return {"pending_invites": pending_invites}
 
     app.include_router(users_router, prefix="/users", tags=["users"])
 

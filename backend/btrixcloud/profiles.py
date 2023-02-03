@@ -20,6 +20,7 @@ from .crawlconfigs import CrawlConfigIdNameOut
 
 BROWSER_EXPIRE = 300
 
+
 # ============================================================================
 class ProfileFile(BaseModel):
     """file from a crawl"""
@@ -168,7 +169,8 @@ class ProfileOps:
         }
 
         url = f"{scheme}://{host}/browser/{browserid}/?{urlencode(params)}"
-        return {"url": url}
+        params["url"] = url
+        return params
 
     async def ping_profile_browser(self, browserid):
         """ping profile browser to keep it running"""

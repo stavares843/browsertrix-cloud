@@ -19,6 +19,7 @@ class UserRole(IntEnum):
     VIEWER = 10
     CRAWLER = 20
     OWNER = 40
+    SUPERADMIN = 100
 
 
 # ============================================================================
@@ -81,7 +82,7 @@ class InviteOps:
                 status_code=403, detail="This user has already been invited"
             )
 
-        # Invitations to a specific org via API must invite role, so if it's
+        # Invitations to a specific org via API must include role, so if it's
         # absent assume this is a general invitation from superadmin.
         if not new_user_invite.role:
             new_user_invite.role = UserRole.OWNER
@@ -187,6 +188,14 @@ class InviteOps:
         )
 
         return False
+
+    async def get_pending_invites(self, org=None):
+        """return list of pending invites."""
+        if org:
+            invites = self.invites.find({"oid": org.id})
+        else:
+            invites = self.invites.find()
+        return [invite async for invite in invites]
 
 
 def init_invites(mdb, email):
